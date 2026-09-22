@@ -1,4 +1,4 @@
-import os
+import argparse
 import sys
 import json
 import socket
@@ -20,6 +20,25 @@ init(autoreset=True)
 
 
 # ============================================================
+# ARGUMENTS
+# ============================================================
+
+parser = argparse.ArgumentParser(
+    description="Tanium API connectivity test"
+)
+
+parser.add_argument(
+    "--api-token",
+    required=True,
+    help="Tanium API token"
+)
+
+args = parser.parse_args()
+
+API_KEY = args.api_token
+
+
+# ============================================================
 # CONFIGURATION
 # ============================================================
 
@@ -27,8 +46,6 @@ BASE_URL = "https://amexgbt-api.cloud.tanium.com"
 
 VALIDATE_URL = f"{BASE_URL}/api/v2/session/validate"
 GRAPHQL_URL = f"{BASE_URL}/plugin/products/gateway/graphql"
-
-API_KEY = os.getenv("TANIUM_SESSION_TOKEN")
 
 TIMEOUT = 30
 
@@ -237,21 +254,16 @@ if not API_KEY:
     )
 
     failure(
-        "TANIUM_SESSION_TOKEN is not configured."
+        "--api-token is empty."
     )
 
     logger.info("")
     logger.info(
-        "PyCharm configuration:"
+        "Usage:"
     )
 
     logger.info(
-        "Run -> Edit Configurations -> Environment variables"
-    )
-
-    logger.info("")
-    logger.info(
-        "TANIUM_SESSION_TOKEN=your_api_key"
+        'python3 tanium_api_test.py --api-token "YOUR_API_TOKEN"'
     )
 
     logger.info("")
