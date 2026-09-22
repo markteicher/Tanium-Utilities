@@ -3,6 +3,7 @@ import sys
 import json
 import socket
 import logging
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -29,48 +30,54 @@ GRAPHQL_URL = f"{BASE_URL}/plugin/products/gateway/graphql"
 
 API_KEY = os.getenv("TANIUM_SESSION_TOKEN")
 
+TIMEOUT = 30
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_FILE = SCRIPT_DIR / "tanium_api_test.log"
 
 
 # ============================================================
-# LOGGING
+# ANSI ESCAPE CODE REMOVER
 # ============================================================
 
-logger = logging.getLogger("tanium_api_test")
-logger.setLevel(logging.DEBUG)
-logger.propagate = False
-
-logger.handlers.clear()
-
-
-# ------------------------------------------------------------
-# FILE LOGGER
-# ------------------------------------------------------------
-
-file_handler = logging.FileHandler(
-    LOG_FILE,
-    mode="a",
-    encoding="utf-8"
+ANSI_ESCAPE = re.compile(
+    r"\x1B(?:[@-_][0-?]*[ -/]*[@-~]|\[[0-?]*[ -/]*[@-~])"
 )
 
-file_handler.setLevel(logging.DEBUG)
 
-file_formatter = logging.Formatter(
-    "%(asctime)s | %(levelname)-8s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
+def strip_ansi(text):
+    """
+    Remove ANSI / Colorama escape sequences from text.
+    """
+    if text is None:
+        return ""
 
-file_handler.setFormatter(file_formatter)
-
-logger.addHandler(file_handler)
+    return ANSI_ESCAPE.sub("", str(text))
 
 
-# ------------------------------------------------------------
-# CONSOLE LOGGER
-# ------------------------------------------------------------
+# ============================================================
+# LOG FORMATTERS
+# ============================================================
+
+class CleanFileFormatter(logging.Formatter):
+    """
+    Formatter used for the .log file.
+
+    Removes all ANSI / Colorama escape sequences so the
+    log file contains clean plain text.
+    """
+
+    def format(self, record):
+
+        formatted = super().format(record)
+
+        return strip_ansi(formatted)
+
 
 class ColorConsoleFormatter(logging.Formatter):
+    """
+    Formatter used for the PyCharm console.
+    """
 
     COLORS = {
         logging.DEBUG: Fore.CYAN,
@@ -82,42 +89,93 @@ class ColorConsoleFormatter(logging.Formatter):
 
     def format(self, record):
 
-        original_levelname = record.levelname
+        message = super().format(record)
 
         color = self.COLORS.get(
             record.levelno,
             Fore.WHITE
         )
 
-        record.levelname = (
-            color +
-            original_levelname +
-            Style.RESET_ALL
+        return (
+            color
+            + message
+            + Style.RESET_ALL
         )
-
-        message = super().format(record)
-
-        record.levelname = original_levelname
-
-        return message
-
-
-console_handler = logging.StreamHandler(sys.stdout)
-
-console_handler.setLevel(logging.INFO)
-
-console_formatter = ColorConsoleFormatter(
-    "%(asctime)s | %(levelname)-17s | %(message)s",
-    datefmt="%H:%M:%S"
-)
-
-console_handler.setFormatter(console_formatter)
-
-logger.addHandler(console_handler)
 
 
 # ============================================================
-# LOG HELPERS
+# LOGGER
+# ============================================================
+
+logger = logging.getLogger(
+    "tanium_api_test"
+)
+
+logger.setLevel(
+    logging.DEBUG
+)
+
+logger.propagate = False
+
+logger.handlers.clear()
+
+
+# ============================================================
+# FILE LOGGING
+# ============================================================
+
+file_handler = logging.FileHandler(
+    LOG_FILE,
+    mode="a",
+    encoding="utf-8"
+)
+
+file_handler.setLevel(
+    logging.DEBUG
+)
+
+file_formatter = CleanFileFormatter(
+    "%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+file_handler.setFormatter(
+    file_formatter
+)
+
+logger.addHandler(
+    file_handler
+)
+
+
+# ============================================================
+# CONSOLE LOGGING
+# ============================================================
+
+console_handler = logging.StreamHandler(
+    sys.stdout
+)
+
+console_handler.setLevel(
+    logging.INFO
+)
+
+console_formatter = ColorConsoleFormatter(
+    "%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%H:%M:%S"
+)
+
+console_handler.setFormatter(
+    console_formatter
+)
+
+logger.addHandler(
+    console_handler
+)
+
+
+# ============================================================
+# LOGGING HELPERS
 # ============================================================
 
 def separator(title=None):
@@ -142,29 +200,29 @@ def subsection(title):
 def success(message):
 
     logger.info(
-        Fore.GREEN +
-        Style.BRIGHT +
-        message +
-        Style.RESET_ALL
+        Fore.GREEN
+        + Style.BRIGHT
+        + message
+        + Style.RESET_ALL
     )
 
 
 def warning(message):
 
     logger.warning(
-        Fore.YELLOW +
-        message +
-        Style.RESET_ALL
+        Fore.YELLOW
+        + message
+        + Style.RESET_ALL
     )
 
 
 def failure(message):
 
     logger.error(
-        Fore.RED +
-        Style.BRIGHT +
-        message +
-        Style.RESET_ALL
+        Fore.RED
+        + Style.BRIGHT
+        + message
+        + Style.RESET_ALL
     )
 
 
@@ -174,14 +232,19 @@ def failure(message):
 
 if not API_KEY:
 
-    separator("TANIUM API TEST")
+    separator(
+        "TANIUM API TEST"
+    )
 
     failure(
         "TANIUM_SESSION_TOKEN is not configured."
     )
 
     logger.info("")
-    logger.info("PyCharm configuration:")
+    logger.info(
+        "PyCharm configuration:"
+    )
+
     logger.info(
         "Run -> Edit Configurations -> Environment variables"
     )
@@ -203,7 +266,9 @@ if not API_KEY:
 # START
 # ============================================================
 
-separator("TANIUM API TEST")
+separator(
+    "TANIUM API TEST"
+)
 
 logger.info(
     f"Log file: {LOG_FILE}"
@@ -243,10 +308,13 @@ http.headers.update(
 
 
 # ============================================================
-# DNS INFORMATION
+# DNS LOOKUP
 # ============================================================
 
-def get_dns_addresses(hostname, port=443):
+def get_dns_addresses(
+    hostname,
+    port=443
+):
 
     addresses = []
 
@@ -274,6 +342,10 @@ def get_dns_addresses(hostname, port=443):
     return addresses
 
 
+# ============================================================
+# DISPLAY TARGET SERVER
+# ============================================================
+
 def show_target_server(url):
 
     parsed = urlparse(url)
@@ -281,7 +353,9 @@ def show_target_server(url):
     hostname = parsed.hostname
     port = parsed.port or 443
 
-    subsection("TARGET SERVER")
+    subsection(
+        "TARGET SERVER"
+    )
 
     logger.info(
         f"Requested URL:      {url}"
@@ -307,6 +381,7 @@ def show_target_server(url):
         )
 
         for ip in addresses:
+
             logger.info(
                 f"    {ip}"
             )
@@ -324,13 +399,19 @@ def show_target_server(url):
 
 def get_peer_server(response):
 
-    paths = [
-        lambda: response.raw._connection.sock,
-        lambda: response.raw.connection.sock,
-        lambda: response.raw._fp.fp.raw._sock,
+    socket_paths = [
+
+        lambda:
+        response.raw._connection.sock,
+
+        lambda:
+        response.raw.connection.sock,
+
+        lambda:
+        response.raw._fp.fp.raw._sock,
     ]
 
-    for getter in paths:
+    for getter in socket_paths:
 
         try:
 
@@ -341,21 +422,33 @@ def get_peer_server(response):
                 peer = sock.getpeername()
 
                 if peer:
-                    return peer[0], peer[1]
+
+                    return (
+                        peer[0],
+                        peer[1]
+                    )
 
         except Exception:
             pass
 
-    return None, None
+    return (
+        None,
+        None
+    )
 
 
 # ============================================================
-# DISPLAY RESPONSE
+# DISPLAY HTTP RESPONSE
 # ============================================================
 
-def show_response(name, response):
+def show_response(
+    name,
+    response
+):
 
-    parsed = urlparse(response.url)
+    parsed = urlparse(
+        response.url
+    )
 
     hostname = parsed.hostname
     port = parsed.port or 443
@@ -364,14 +457,18 @@ def show_response(name, response):
         response
     )
 
-    separator(name)
+    separator(
+        name
+    )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # REQUEST DESTINATION
-    # --------------------------------------------------------
+    # ========================================================
 
-    subsection("REQUEST DESTINATION")
+    subsection(
+        "REQUEST DESTINATION"
+    )
 
     logger.info(
         f"URL:             {response.url}"
@@ -390,11 +487,13 @@ def show_response(name, response):
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # DNS
-    # --------------------------------------------------------
+    # ========================================================
 
-    subsection("DNS RESOLUTION")
+    subsection(
+        "DNS RESOLUTION"
+    )
 
     addresses = get_dns_addresses(
         hostname,
@@ -404,6 +503,7 @@ def show_response(name, response):
     if addresses:
 
         for ip in addresses:
+
             logger.info(
                 f"Resolved IP:     {ip}"
             )
@@ -415,11 +515,13 @@ def show_response(name, response):
         )
 
 
-    # --------------------------------------------------------
-    # ACTUAL SERVER / NETWORK PEER
-    # --------------------------------------------------------
+    # ========================================================
+    # ACTUAL SERVER
+    # ========================================================
 
-    subsection("SERVER ACTUALLY REACHED")
+    subsection(
+        "SERVER ACTUALLY REACHED"
+    )
 
     if peer_ip:
 
@@ -439,11 +541,13 @@ def show_response(name, response):
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # HTTP RESPONSE
-    # --------------------------------------------------------
+    # ========================================================
 
-    subsection("HTTP RESPONSE")
+    subsection(
+        "HTTP RESPONSE"
+    )
 
     logger.info(
         f"HTTP Status:      {response.status_code}"
@@ -499,11 +603,13 @@ def show_response(name, response):
     )
 
 
-    # --------------------------------------------------------
-    # ALL RESPONSE HEADERS
-    # --------------------------------------------------------
+    # ========================================================
+    # ALL HEADERS
+    # ========================================================
 
-    subsection("ALL RESPONSE HEADERS")
+    subsection(
+        "ALL RESPONSE HEADERS"
+    )
 
     for key, value in response.headers.items():
 
@@ -512,11 +618,13 @@ def show_response(name, response):
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # RESPONSE BODY
-    # --------------------------------------------------------
+    # ========================================================
 
-    subsection("RESPONSE BODY")
+    subsection(
+        "RESPONSE BODY"
+    )
 
     try:
 
@@ -528,7 +636,10 @@ def show_response(name, response):
         )
 
         for line in formatted_body.splitlines():
-            logger.info(line)
+
+            logger.info(
+                line
+            )
 
     except ValueError:
 
@@ -537,7 +648,10 @@ def show_response(name, response):
         if body:
 
             for line in body.splitlines():
-                logger.info(line)
+
+                logger.info(
+                    line
+                )
 
         else:
 
@@ -546,19 +660,23 @@ def show_response(name, response):
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # RESULT
-    # --------------------------------------------------------
+    # ========================================================
 
-    subsection("RESULT")
+    subsection(
+        "RESULT"
+    )
 
     status = response.status_code
+
 
     if 200 <= status < 300:
 
         success(
             f"SUCCESS - HTTP {status}"
         )
+
 
     elif status == 401:
 
@@ -570,6 +688,7 @@ def show_response(name, response):
             "The API key/session may be invalid or expired."
         )
 
+
     elif status == 403:
 
         failure(
@@ -577,9 +696,8 @@ def show_response(name, response):
         )
 
         logger.error(
-            "The request reached a server, gateway, "
-            "proxy, CDN, load balancer, or WAF, "
-            "but access was denied."
+            "The request reached a server, gateway, proxy, "
+            "CDN, load balancer, or WAF, but access was denied."
         )
 
         logger.error(
@@ -613,6 +731,7 @@ def show_response(name, response):
                 f"Via/proxy header: {via}"
             )
 
+
     elif status == 404:
 
         failure(
@@ -623,15 +742,20 @@ def show_response(name, response):
             "The requested API endpoint was not found."
         )
 
+
     else:
 
         failure(
             f"FAILED - HTTP {status}"
         )
 
+
     separator()
 
-    return peer_ip, peer_port
+    return (
+        peer_ip,
+        peer_port
+    )
 
 
 # ============================================================
@@ -645,34 +769,51 @@ def handle_request_exception(exc):
         requests.exceptions.SSLError
     ):
 
-        failure("SSL ERROR")
+        failure(
+            "SSL ERROR"
+        )
+
 
     elif isinstance(
         exc,
         requests.exceptions.ProxyError
     ):
 
-        failure("PROXY ERROR")
+        failure(
+            "PROXY ERROR"
+        )
+
 
     elif isinstance(
         exc,
         requests.exceptions.ConnectionError
     ):
 
-        failure("CONNECTION ERROR")
+        failure(
+            "CONNECTION ERROR"
+        )
+
 
     elif isinstance(
         exc,
         requests.exceptions.Timeout
     ):
 
-        failure("REQUEST TIMED OUT")
+        failure(
+            "REQUEST TIMED OUT"
+        )
+
 
     else:
 
-        failure("REQUEST ERROR")
+        failure(
+            "REQUEST ERROR"
+        )
 
-    logger.exception(exc)
+
+    logger.exception(
+        exc
+    )
 
 
 # ============================================================
@@ -701,7 +842,9 @@ progress = tqdm(
 # 1. VALIDATE SESSION
 # ============================================================
 
-separator("1. TESTING TANIUM SESSION VALIDATION")
+separator(
+    "1. TESTING TANIUM SESSION VALIDATION"
+)
 
 validate_payload = {
     "session": API_KEY
@@ -712,7 +855,7 @@ try:
     response = http.post(
         VALIDATE_URL,
         json=validate_payload,
-        timeout=30,
+        timeout=TIMEOUT,
         stream=True
     )
 
@@ -723,11 +866,14 @@ try:
 
     progress.update(1)
 
+
 except requests.exceptions.RequestException as exc:
 
     progress.close()
 
-    handle_request_exception(exc)
+    handle_request_exception(
+        exc
+    )
 
     logger.info(
         f"Log file: {LOG_FILE}"
@@ -740,11 +886,13 @@ except requests.exceptions.RequestException as exc:
 # STOP IF VALIDATION FAILED
 # ============================================================
 
-if response.status_code < 200 or response.status_code >= 300:
+if not 200 <= response.status_code < 300:
 
     progress.close()
 
-    separator("SESSION VALIDATION FAILED")
+    separator(
+        "SESSION VALIDATION FAILED"
+    )
 
     logger.error(
         f"API key: {API_KEY}"
@@ -781,17 +929,20 @@ if response.status_code < 200 or response.status_code >= 300:
     )
 
     logger.error("")
+
     logger.error(
         "GraphQL test will not run because "
         "session validation failed."
     )
 
     logger.info("")
+
     logger.info(
         f"Full diagnostic log: {LOG_FILE}"
     )
 
     response.close()
+    http.close()
 
     sys.exit(1)
 
@@ -803,7 +954,9 @@ response.close()
 # 2. GRAPHQL TEST
 # ============================================================
 
-separator("2. TESTING TANIUM GRAPHQL ENDPOINT")
+separator(
+    "2. TESTING TANIUM GRAPHQL ENDPOINT"
+)
 
 graphql_payload = {
     "query": "{ now }"
@@ -814,7 +967,7 @@ try:
     response = http.post(
         GRAPHQL_URL,
         json=graphql_payload,
-        timeout=30,
+        timeout=TIMEOUT,
         stream=True
     )
 
@@ -825,15 +978,20 @@ try:
 
     progress.update(1)
 
+
 except requests.exceptions.RequestException as exc:
 
     progress.close()
 
-    handle_request_exception(exc)
+    handle_request_exception(
+        exc
+    )
 
     logger.info(
         f"Log file: {LOG_FILE}"
     )
+
+    http.close()
 
     sys.exit(1)
 
@@ -849,24 +1007,26 @@ progress.close()
 # FINAL SUMMARY
 # ============================================================
 
-separator("TEST COMPLETE")
-
-logger.info(
-    f"API key used:       {API_KEY}"
+separator(
+    "TEST COMPLETE"
 )
 
 logger.info(
-    f"GraphQL status:     "
+    f"API key used:        {API_KEY}"
+)
+
+logger.info(
+    f"GraphQL status:      "
     f"{response.status_code}"
 )
 
 logger.info(
-    f"GraphQL reason:     "
+    f"GraphQL reason:      "
     f"{response.reason}"
 )
 
 logger.info(
-    f"Requested server:   "
+    f"Requested server:    "
     f"{urlparse(response.url).hostname}"
 )
 
@@ -878,18 +1038,19 @@ if peer_ip:
     )
 
 logger.info(
-    f"HTTP Server header: "
+    f"HTTP Server header:  "
     f"{response.headers.get('Server')}"
 )
 
 logger.info(
-    f"Via/proxy header:   "
+    f"Via/proxy header:    "
     f"{response.headers.get('Via')}"
 )
 
 logger.info(
-    f"Log file:           {LOG_FILE}"
+    f"Log file:            {LOG_FILE}"
 )
+
 
 if 200 <= response.status_code < 300:
 
@@ -903,7 +1064,16 @@ else:
         "TANIUM API TEST COMPLETED WITH ERRORS"
     )
 
+
 separator()
 
+
+# ============================================================
+# CLEANUP
+# ============================================================
+
 response.close()
+
 http.close()
+
+logging.shutdown()
