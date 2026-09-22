@@ -2,9 +2,20 @@ import os
 import sys
 import json
 import socket
+import logging
+from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+from colorama import Fore, Style, init
+from tqdm import tqdm
+
+
+# ============================================================
+# INITIALIZE COLORAMA
+# ============================================================
+
+init(autoreset=True)
 
 
 # ============================================================
@@ -18,54 +29,215 @@ GRAPHQL_URL = f"{BASE_URL}/plugin/products/gateway/graphql"
 
 API_KEY = os.getenv("TANIUM_SESSION_TOKEN")
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+LOG_FILE = SCRIPT_DIR / "tanium_api_test.log"
+
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+logger = logging.getLogger("tanium_api_test")
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
+
+logger.handlers.clear()
+
+
+# ------------------------------------------------------------
+# FILE LOGGER
+# ------------------------------------------------------------
+
+file_handler = logging.FileHandler(
+    LOG_FILE,
+    mode="a",
+    encoding="utf-8"
+)
+
+file_handler.setLevel(logging.DEBUG)
+
+file_formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+file_handler.setFormatter(file_formatter)
+
+logger.addHandler(file_handler)
+
+
+# ------------------------------------------------------------
+# CONSOLE LOGGER
+# ------------------------------------------------------------
+
+class ColorConsoleFormatter(logging.Formatter):
+
+    COLORS = {
+        logging.DEBUG: Fore.CYAN,
+        logging.INFO: Fore.WHITE,
+        logging.WARNING: Fore.YELLOW,
+        logging.ERROR: Fore.RED,
+        logging.CRITICAL: Fore.RED + Style.BRIGHT,
+    }
+
+    def format(self, record):
+
+        original_levelname = record.levelname
+
+        color = self.COLORS.get(
+            record.levelno,
+            Fore.WHITE
+        )
+
+        record.levelname = (
+            color +
+            original_levelname +
+            Style.RESET_ALL
+        )
+
+        message = super().format(record)
+
+        record.levelname = original_levelname
+
+        return message
+
+
+console_handler = logging.StreamHandler(sys.stdout)
+
+console_handler.setLevel(logging.INFO)
+
+console_formatter = ColorConsoleFormatter(
+    "%(asctime)s | %(levelname)-17s | %(message)s",
+    datefmt="%H:%M:%S"
+)
+
+console_handler.setFormatter(console_formatter)
+
+logger.addHandler(console_handler)
+
+
+# ============================================================
+# LOG HELPERS
+# ============================================================
+
+def separator(title=None):
+
+    line = "=" * 90
+
+    logger.info(line)
+
+    if title:
+        logger.info(title)
+        logger.info(line)
+
+
+def subsection(title):
+
+    logger.info("")
+    logger.info("-" * 90)
+    logger.info(title)
+    logger.info("-" * 90)
+
+
+def success(message):
+
+    logger.info(
+        Fore.GREEN +
+        Style.BRIGHT +
+        message +
+        Style.RESET_ALL
+    )
+
+
+def warning(message):
+
+    logger.warning(
+        Fore.YELLOW +
+        message +
+        Style.RESET_ALL
+    )
+
+
+def failure(message):
+
+    logger.error(
+        Fore.RED +
+        Style.BRIGHT +
+        message +
+        Style.RESET_ALL
+    )
+
 
 # ============================================================
 # CHECK API KEY
 # ============================================================
 
 if not API_KEY:
-    print()
-    print("=" * 80)
-    print("ERROR: TANIUM_SESSION_TOKEN is not configured.")
-    print("=" * 80)
-    print()
-    print("In PyCharm:")
-    print("Run -> Edit Configurations -> Environment variables")
-    print()
-    print("Add:")
-    print("TANIUM_SESSION_TOKEN=your_api_key")
-    print()
+
+    separator("TANIUM API TEST")
+
+    failure(
+        "TANIUM_SESSION_TOKEN is not configured."
+    )
+
+    logger.info("")
+    logger.info("PyCharm configuration:")
+    logger.info(
+        "Run -> Edit Configurations -> Environment variables"
+    )
+
+    logger.info("")
+    logger.info(
+        "TANIUM_SESSION_TOKEN=your_api_key"
+    )
+
+    logger.info("")
+    logger.info(
+        f"Log file: {LOG_FILE}"
+    )
 
     sys.exit(1)
 
 
 # ============================================================
-# PRINT API KEY INFORMATION
+# START
 # ============================================================
 
-print()
-print("=" * 80)
-print("TANIUM API TEST")
-print("=" * 80)
+separator("TANIUM API TEST")
 
-print("API key loaded: YES")
-print(f"API key length: {len(API_KEY)}")
-print(f"API key: {API_KEY}")
+logger.info(
+    f"Log file: {LOG_FILE}"
+)
 
-print("=" * 80)
+logger.info(
+    "API key loaded: YES"
+)
+
+logger.info(
+    f"API key length: {len(API_KEY)}"
+)
+
+logger.info(
+    f"API key: {API_KEY}"
+)
+
+logger.info(
+    f"Base URL: {BASE_URL}"
+)
 
 
 # ============================================================
-# CREATE HTTP SESSION
+# HTTP SESSION
 # ============================================================
 
 http = requests.Session()
 
 http.headers.update(
     {
-        "Content-Type": "application/json",
         "Accept": "application/json",
+        "Content-Type": "application/json",
         "session": API_KEY,
+        "User-Agent": "Tanium-Python-API-Test/1.0",
     }
 )
 
@@ -74,79 +246,107 @@ http.headers.update(
 # DNS INFORMATION
 # ============================================================
 
-def show_dns_info(url):
+def get_dns_addresses(hostname, port=443):
 
-    parsed = urlparse(url)
-    hostname = parsed.hostname
-
-    print()
-    print("TARGET SERVER")
-    print("-" * 80)
-
-    print(f"Requested URL:      {url}")
-    print(f"Requested hostname: {hostname}")
+    addresses = []
 
     try:
 
-        addresses = socket.getaddrinfo(
+        results = socket.getaddrinfo(
             hostname,
-            443,
+            port,
             type=socket.SOCK_STREAM
         )
 
-        ip_addresses = []
+        for result in results:
 
-        for entry in addresses:
+            ip = result[4][0]
 
-            ip = entry[4][0]
-
-            if ip not in ip_addresses:
-                ip_addresses.append(ip)
-
-        print("DNS resolved IP(s):")
-
-        for ip in ip_addresses:
-            print(f"  {ip}")
+            if ip not in addresses:
+                addresses.append(ip)
 
     except socket.gaierror as exc:
 
-        print(f"DNS lookup failed: {exc}")
+        logger.exception(
+            f"DNS lookup failed for {hostname}: {exc}"
+        )
+
+    return addresses
+
+
+def show_target_server(url):
+
+    parsed = urlparse(url)
+
+    hostname = parsed.hostname
+    port = parsed.port or 443
+
+    subsection("TARGET SERVER")
+
+    logger.info(
+        f"Requested URL:      {url}"
+    )
+
+    logger.info(
+        f"Requested hostname: {hostname}"
+    )
+
+    logger.info(
+        f"Requested port:     {port}"
+    )
+
+    addresses = get_dns_addresses(
+        hostname,
+        port
+    )
+
+    if addresses:
+
+        logger.info(
+            "DNS resolved IP address(es):"
+        )
+
+        for ip in addresses:
+            logger.info(
+                f"    {ip}"
+            )
+
+    else:
+
+        warning(
+            "No DNS IP addresses were returned."
+        )
 
 
 # ============================================================
-# ACTUAL NETWORK PEER
+# GET ACTUAL CONNECTED PEER
 # ============================================================
 
 def get_peer_server(response):
 
-    peer_ip = None
-    peer_port = None
+    paths = [
+        lambda: response.raw._connection.sock,
+        lambda: response.raw.connection.sock,
+        lambda: response.raw._fp.fp.raw._sock,
+    ]
 
-    try:
-
-        connection = response.raw._connection
-
-        if connection and connection.sock:
-
-            peer_ip, peer_port = connection.sock.getpeername()
-
-    except Exception:
-        pass
-
-    if not peer_ip:
+    for getter in paths:
 
         try:
 
-            connection = response.raw.connection
+            sock = getter()
 
-            if connection and connection.sock:
+            if sock:
 
-                peer_ip, peer_port = connection.sock.getpeername()
+                peer = sock.getpeername()
+
+                if peer:
+                    return peer[0], peer[1]
 
         except Exception:
             pass
 
-    return peer_ip, peer_port
+    return None, None
 
 
 # ============================================================
@@ -155,212 +355,359 @@ def get_peer_server(response):
 
 def show_response(name, response):
 
-    print()
-    print("=" * 80)
-    print(name)
-    print("=" * 80)
-
     parsed = urlparse(response.url)
 
-    print()
-    print("REQUEST DESTINATION")
-    print("-" * 80)
+    hostname = parsed.hostname
+    port = parsed.port or 443
 
-    print(f"URL:             {response.url}")
-    print(f"Hostname:        {parsed.hostname}")
-    print(f"Protocol:        {parsed.scheme}")
-    print(f"Port:            {parsed.port or 443}")
+    peer_ip, peer_port = get_peer_server(
+        response
+    )
+
+    separator(name)
+
+
+    # --------------------------------------------------------
+    # REQUEST DESTINATION
+    # --------------------------------------------------------
+
+    subsection("REQUEST DESTINATION")
+
+    logger.info(
+        f"URL:             {response.url}"
+    )
+
+    logger.info(
+        f"Hostname:        {hostname}"
+    )
+
+    logger.info(
+        f"Protocol:        {parsed.scheme}"
+    )
+
+    logger.info(
+        f"Port:            {port}"
+    )
+
 
     # --------------------------------------------------------
     # DNS
     # --------------------------------------------------------
 
-    try:
+    subsection("DNS RESOLUTION")
 
-        addresses = socket.getaddrinfo(
-            parsed.hostname,
-            parsed.port or 443,
-            type=socket.SOCK_STREAM
-        )
+    addresses = get_dns_addresses(
+        hostname,
+        port
+    )
 
-        resolved_ips = []
+    if addresses:
 
-        for address in addresses:
-
-            ip = address[4][0]
-
-            if ip not in resolved_ips:
-                resolved_ips.append(ip)
-
-        print()
-        print("DNS resolved IP addresses:")
-
-        for ip in resolved_ips:
-            print(f"  {ip}")
-
-    except Exception as exc:
-
-        print(f"DNS lookup failed: {exc}")
-
-
-    # --------------------------------------------------------
-    # ACTUAL CONNECTION
-    # --------------------------------------------------------
-
-    peer_ip, peer_port = get_peer_server(response)
-
-    print()
-    print("SERVER ACTUALLY REACHED")
-    print("-" * 80)
-
-    if peer_ip:
-
-        print(f"Connected peer IP:   {peer_ip}")
-        print(f"Connected peer port: {peer_port}")
+        for ip in addresses:
+            logger.info(
+                f"Resolved IP:     {ip}"
+            )
 
     else:
 
-        print("Connected peer IP:   Not available from requests connection object")
+        warning(
+            "DNS resolution returned no addresses."
+        )
+
+
+    # --------------------------------------------------------
+    # ACTUAL SERVER / NETWORK PEER
+    # --------------------------------------------------------
+
+    subsection("SERVER ACTUALLY REACHED")
+
+    if peer_ip:
+
+        success(
+            f"Connected peer IP:   {peer_ip}"
+        )
+
+        logger.info(
+            f"Connected peer port: {peer_port}"
+        )
+
+    else:
+
+        warning(
+            "Connected peer IP was not available "
+            "from the requests socket."
+        )
 
 
     # --------------------------------------------------------
     # HTTP RESPONSE
     # --------------------------------------------------------
 
-    print()
-    print("HTTP RESPONSE")
-    print("-" * 80)
+    subsection("HTTP RESPONSE")
 
-    print(f"HTTP Status:       {response.status_code}")
-    print(f"Content-Type:      {response.headers.get('Content-Type')}")
-    print(f"Server header:     {response.headers.get('Server')}")
-    print(f"Via:               {response.headers.get('Via')}")
-    print(f"X-Cache:           {response.headers.get('X-Cache')}")
-    print(f"X-Served-By:       {response.headers.get('X-Served-By')}")
-    print(f"X-Request-ID:      {response.headers.get('X-Request-ID')}")
-    print(f"X-Correlation-ID:  {response.headers.get('X-Correlation-ID')}")
-    print(f"CF-Ray:            {response.headers.get('CF-Ray')}")
+    logger.info(
+        f"HTTP Status:      {response.status_code}"
+    )
+
+    logger.info(
+        f"Reason:           {response.reason}"
+    )
+
+    logger.info(
+        f"Content-Type:     "
+        f"{response.headers.get('Content-Type')}"
+    )
+
+    logger.info(
+        f"Content-Length:   "
+        f"{response.headers.get('Content-Length')}"
+    )
+
+    logger.info(
+        f"Server:           "
+        f"{response.headers.get('Server')}"
+    )
+
+    logger.info(
+        f"Via:              "
+        f"{response.headers.get('Via')}"
+    )
+
+    logger.info(
+        f"X-Cache:          "
+        f"{response.headers.get('X-Cache')}"
+    )
+
+    logger.info(
+        f"X-Served-By:      "
+        f"{response.headers.get('X-Served-By')}"
+    )
+
+    logger.info(
+        f"X-Request-ID:     "
+        f"{response.headers.get('X-Request-ID')}"
+    )
+
+    logger.info(
+        f"X-Correlation-ID: "
+        f"{response.headers.get('X-Correlation-ID')}"
+    )
+
+    logger.info(
+        f"CF-Ray:           "
+        f"{response.headers.get('CF-Ray')}"
+    )
 
 
     # --------------------------------------------------------
     # ALL RESPONSE HEADERS
     # --------------------------------------------------------
 
-    print()
-    print("ALL RESPONSE HEADERS")
-    print("-" * 80)
+    subsection("ALL RESPONSE HEADERS")
 
     for key, value in response.headers.items():
-        print(f"{key}: {value}")
+
+        logger.info(
+            f"{key}: {value}"
+        )
 
 
     # --------------------------------------------------------
     # RESPONSE BODY
     # --------------------------------------------------------
 
-    print()
-    print("RESPONSE BODY")
-    print("-" * 80)
+    subsection("RESPONSE BODY")
 
     try:
 
         data = response.json()
 
-        print(
-            json.dumps(
-                data,
-                indent=2
-            )
+        formatted_body = json.dumps(
+            data,
+            indent=2
         )
+
+        for line in formatted_body.splitlines():
+            logger.info(line)
 
     except ValueError:
 
-        print(response.text[:5000])
+        body = response.text[:10000]
+
+        if body:
+
+            for line in body.splitlines():
+                logger.info(line)
+
+        else:
+
+            logger.info(
+                "<empty response body>"
+            )
 
 
     # --------------------------------------------------------
     # RESULT
     # --------------------------------------------------------
 
-    print()
-    print("RESULT")
-    print("-" * 80)
+    subsection("RESULT")
 
-    if response.status_code == 200:
+    status = response.status_code
 
-        print("SUCCESS - HTTP 200")
+    if 200 <= status < 300:
 
+        success(
+            f"SUCCESS - HTTP {status}"
+        )
 
-    elif response.status_code == 401:
+    elif status == 401:
 
-        print("FAILED - HTTP 401 UNAUTHORIZED")
-        print("The API key/session may be invalid or expired.")
+        failure(
+            "FAILED - HTTP 401 UNAUTHORIZED"
+        )
 
+        logger.error(
+            "The API key/session may be invalid or expired."
+        )
 
-    elif response.status_code == 403:
+    elif status == 403:
 
-        print("FAILED - HTTP 403 FORBIDDEN")
+        failure(
+            "FAILED - HTTP 403 FORBIDDEN"
+        )
 
-        print()
-        print("The request reached a server, proxy, gateway, or WAF")
-        print("but access to the requested resource was denied.")
+        logger.error(
+            "The request reached a server, gateway, "
+            "proxy, CDN, load balancer, or WAF, "
+            "but access was denied."
+        )
 
-        print()
-        print(f"Requested host: {parsed.hostname}")
+        logger.error(
+            f"Requested hostname: {hostname}"
+        )
 
         if peer_ip:
-            print(f"Network peer reached: {peer_ip}:{peer_port}")
 
-        if response.headers.get("Server"):
-            print(
-                f"Server software/header: "
-                f"{response.headers.get('Server')}"
+            logger.error(
+                f"Network peer reached: "
+                f"{peer_ip}:{peer_port}"
             )
 
-        if response.headers.get("Via"):
-            print(
-                f"Via/proxy: "
-                f"{response.headers.get('Via')}"
+        server = response.headers.get(
+            "Server"
+        )
+
+        if server:
+
+            logger.error(
+                f"Server header: {server}"
             )
 
+        via = response.headers.get(
+            "Via"
+        )
 
-    elif response.status_code == 404:
+        if via:
 
-        print("FAILED - HTTP 404 NOT FOUND")
-        print("The requested API endpoint was not found.")
+            logger.error(
+                f"Via/proxy header: {via}"
+            )
 
+    elif status == 404:
+
+        failure(
+            "FAILED - HTTP 404 NOT FOUND"
+        )
+
+        logger.error(
+            "The requested API endpoint was not found."
+        )
 
     else:
 
-        print(
-            f"FAILED - HTTP {response.status_code}"
+        failure(
+            f"FAILED - HTTP {status}"
         )
 
-    print("=" * 80)
+    separator()
+
+    return peer_ip, peer_port
 
 
 # ============================================================
-# SHOW TARGET SERVER BEFORE REQUEST
+# REQUEST ERROR HANDLER
 # ============================================================
 
-show_dns_info(VALIDATE_URL)
+def handle_request_exception(exc):
+
+    if isinstance(
+        exc,
+        requests.exceptions.SSLError
+    ):
+
+        failure("SSL ERROR")
+
+    elif isinstance(
+        exc,
+        requests.exceptions.ProxyError
+    ):
+
+        failure("PROXY ERROR")
+
+    elif isinstance(
+        exc,
+        requests.exceptions.ConnectionError
+    ):
+
+        failure("CONNECTION ERROR")
+
+    elif isinstance(
+        exc,
+        requests.exceptions.Timeout
+    ):
+
+        failure("REQUEST TIMED OUT")
+
+    else:
+
+        failure("REQUEST ERROR")
+
+    logger.exception(exc)
 
 
 # ============================================================
-# 1. VALIDATE TANIUM SESSION
+# SHOW INITIAL TARGET
 # ============================================================
 
-print()
-print("=" * 80)
-print("TESTING TANIIUM SESSION VALIDATION")
-print("=" * 80)
+show_target_server(
+    VALIDATE_URL
+)
 
+
+# ============================================================
+# PROGRESS BAR
+# ============================================================
+
+progress = tqdm(
+    total=2,
+    desc="Tanium API tests",
+    unit="test",
+    dynamic_ncols=True,
+    colour="green"
+)
+
+
+# ============================================================
+# 1. VALIDATE SESSION
+# ============================================================
+
+separator("1. TESTING TANIUM SESSION VALIDATION")
+
+validate_payload = {
+    "session": API_KEY
+}
 
 try:
-
-    validate_payload = {
-        "session": API_KEY
-    }
 
     response = http.post(
         VALIDATE_URL,
@@ -369,91 +716,80 @@ try:
         stream=True
     )
 
-    show_response(
+    peer_ip, peer_port = show_response(
         "1. SESSION VALIDATION",
         response
     )
 
-
-except requests.exceptions.SSLError as exc:
-
-    print()
-    print("SSL ERROR")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
-
-except requests.exceptions.ProxyError as exc:
-
-    print()
-    print("PROXY ERROR")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
-
-except requests.exceptions.ConnectionError as exc:
-
-    print()
-    print("CONNECTION ERROR")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
-
-except requests.exceptions.Timeout as exc:
-
-    print()
-    print("REQUEST TIMED OUT")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
+    progress.update(1)
 
 except requests.exceptions.RequestException as exc:
 
-    print()
-    print("REQUEST ERROR")
-    print("-" * 80)
-    print(exc)
+    progress.close()
+
+    handle_request_exception(exc)
+
+    logger.info(
+        f"Log file: {LOG_FILE}"
+    )
 
     sys.exit(1)
 
 
 # ============================================================
-# STOP IF SESSION VALIDATION FAILED
+# STOP IF VALIDATION FAILED
 # ============================================================
 
-if response.status_code != 200:
+if response.status_code < 200 or response.status_code >= 300:
 
-    print()
-    print("=" * 80)
-    print("SESSION VALIDATION FAILED")
-    print("=" * 80)
+    progress.close()
 
-    print(f"API key:       {API_KEY}")
-    print(f"HTTP status:   {response.status_code}")
-    print(f"Server header: {response.headers.get('Server')}")
-    print(f"Via:           {response.headers.get('Via')}")
+    separator("SESSION VALIDATION FAILED")
 
-    peer_ip, peer_port = get_peer_server(response)
+    logger.error(
+        f"API key: {API_KEY}"
+    )
+
+    logger.error(
+        f"HTTP status: {response.status_code}"
+    )
+
+    logger.error(
+        f"HTTP reason: {response.reason}"
+    )
+
+    logger.error(
+        f"Requested server: "
+        f"{urlparse(response.url).hostname}"
+    )
 
     if peer_ip:
 
-        print(f"Peer reached:  {peer_ip}:{peer_port}")
+        logger.error(
+            f"Server/peer reached: "
+            f"{peer_ip}:{peer_port}"
+        )
 
-    print()
-    print(
-        "GraphQL test will not run because session validation "
-        "did not return HTTP 200."
+    logger.error(
+        f"Server header: "
+        f"{response.headers.get('Server')}"
     )
 
-    print("=" * 80)
+    logger.error(
+        f"Via header: "
+        f"{response.headers.get('Via')}"
+    )
+
+    logger.error("")
+    logger.error(
+        "GraphQL test will not run because "
+        "session validation failed."
+    )
+
+    logger.info("")
+    logger.info(
+        f"Full diagnostic log: {LOG_FILE}"
+    )
 
     response.close()
 
@@ -467,19 +803,11 @@ response.close()
 # 2. GRAPHQL TEST
 # ============================================================
 
-print()
-print("=" * 80)
-print("SESSION VALIDATION SUCCEEDED")
-print("=" * 80)
-
-print()
-print("Testing Tanium GraphQL endpoint...")
-
+separator("2. TESTING TANIUM GRAPHQL ENDPOINT")
 
 graphql_payload = {
     "query": "{ now }"
 }
-
 
 try:
 
@@ -490,90 +818,92 @@ try:
         stream=True
     )
 
-    show_response(
+    peer_ip, peer_port = show_response(
         "2. GRAPHQL TEST",
         response
     )
 
-
-except requests.exceptions.SSLError as exc:
-
-    print()
-    print("SSL ERROR")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
-
-except requests.exceptions.ProxyError as exc:
-
-    print()
-    print("PROXY ERROR")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
-
-except requests.exceptions.ConnectionError as exc:
-
-    print()
-    print("CONNECTION ERROR")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
-
-except requests.exceptions.Timeout as exc:
-
-    print()
-    print("REQUEST TIMED OUT")
-    print("-" * 80)
-    print(exc)
-
-    sys.exit(1)
-
+    progress.update(1)
 
 except requests.exceptions.RequestException as exc:
 
-    print()
-    print("REQUEST ERROR")
-    print("-" * 80)
-    print(exc)
+    progress.close()
+
+    handle_request_exception(exc)
+
+    logger.info(
+        f"Log file: {LOG_FILE}"
+    )
 
     sys.exit(1)
+
+
+# ============================================================
+# FINISH PROGRESS
+# ============================================================
+
+progress.close()
 
 
 # ============================================================
 # FINAL SUMMARY
 # ============================================================
 
-peer_ip, peer_port = get_peer_server(response)
+separator("TEST COMPLETE")
 
-print()
-print("=" * 80)
-print("TEST COMPLETE")
-print("=" * 80)
+logger.info(
+    f"API key used:       {API_KEY}"
+)
 
-print(f"API key used:       {API_KEY}")
-print(f"GraphQL status:     {response.status_code}")
-print(f"Requested server:   {urlparse(response.url).hostname}")
+logger.info(
+    f"GraphQL status:     "
+    f"{response.status_code}"
+)
+
+logger.info(
+    f"GraphQL reason:     "
+    f"{response.reason}"
+)
+
+logger.info(
+    f"Requested server:   "
+    f"{urlparse(response.url).hostname}"
+)
 
 if peer_ip:
-    print(f"Server/peer reached: {peer_ip}:{peer_port}")
 
-print(
+    logger.info(
+        f"Server/peer reached: "
+        f"{peer_ip}:{peer_port}"
+    )
+
+logger.info(
     f"HTTP Server header: "
     f"{response.headers.get('Server')}"
 )
 
-print(
+logger.info(
     f"Via/proxy header:   "
     f"{response.headers.get('Via')}"
 )
 
-print("=" * 80)
+logger.info(
+    f"Log file:           {LOG_FILE}"
+)
+
+if 200 <= response.status_code < 300:
+
+    success(
+        "TANIUM API TEST COMPLETED SUCCESSFULLY"
+    )
+
+else:
+
+    failure(
+        "TANIUM API TEST COMPLETED WITH ERRORS"
+    )
+
+separator()
 
 response.close()
+http.close()
