@@ -24,7 +24,7 @@ init(autoreset=True)
 # ============================================================
 
 parser = argparse.ArgumentParser(
-    description="Tanium API connectivity test"
+    description="Tanium API Gateway connectivity test"
 )
 
 parser.add_argument(
@@ -44,7 +44,6 @@ API_KEY = args.api_token
 
 BASE_URL = "https://amexgbt-api.cloud.tanium.com"
 
-VALIDATE_URL = f"{BASE_URL}/api/v2/session/validate"
 GRAPHQL_URL = f"{BASE_URL}/plugin/products/gateway/graphql"
 
 TIMEOUT = 30
@@ -80,20 +79,18 @@ class CleanFileFormatter(logging.Formatter):
     """
     Formatter used for the .log file.
 
-    Removes all ANSI / Colorama escape sequences so the
+    Removes ANSI / Colorama escape sequences so the
     log file contains clean plain text.
     """
 
     def format(self, record):
-
         formatted = super().format(record)
-
         return strip_ansi(formatted)
 
 
 class ColorConsoleFormatter(logging.Formatter):
     """
-    Formatter used for the PyCharm console.
+    Formatter used for the console.
     """
 
     COLORS = {
@@ -133,7 +130,6 @@ logger.setLevel(
 )
 
 logger.propagate = False
-
 logger.handlers.clear()
 
 
@@ -152,7 +148,7 @@ file_handler.setLevel(
 )
 
 file_formatter = CleanFileFormatter(
-    "%(asctime)s | %(levelname)-8s | %(message)s",
+    "[%(asctime)s] [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
@@ -178,7 +174,7 @@ console_handler.setLevel(
 )
 
 console_formatter = ColorConsoleFormatter(
-    "%(asctime)s | %(levelname)-8s | %(message)s",
+    "[%(asctime)s] [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S"
 )
 
@@ -247,76 +243,22 @@ def failure(message):
 # CHECK API KEY
 # ============================================================
 
-if not API_KEY:
+if not API_KEY.strip():
 
     separator(
         "TANIUM API TEST"
     )
 
     failure(
-        "--api-token is empty."
+        "--api-token cannot be empty."
     )
 
     logger.info("")
     logger.info(
-        "Usage:"
-    )
-
-    logger.info(
-        'python3 tanium_api_test.py --api-token "YOUR_API_TOKEN"'
-    )
-
-    logger.info("")
-    logger.info(
-        f"Log file: {LOG_FILE}"
+        'Usage: python3 tanium_api_test.py --api-token "YOUR_API_TOKEN"'
     )
 
     sys.exit(1)
-
-
-# ============================================================
-# START
-# ============================================================
-
-separator(
-    "TANIUM API TEST"
-)
-
-logger.info(
-    f"Log file: {LOG_FILE}"
-)
-
-logger.info(
-    "API key loaded: YES"
-)
-
-logger.info(
-    f"API key length: {len(API_KEY)}"
-)
-
-logger.info(
-    f"API key: {API_KEY}"
-)
-
-logger.info(
-    f"Base URL: {BASE_URL}"
-)
-
-
-# ============================================================
-# HTTP SESSION
-# ============================================================
-
-http = requests.Session()
-
-http.headers.update(
-    {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "session": API_KEY,
-        "User-Agent": "Tanium-Python-API-Test/1.0",
-    }
-)
 
 
 # ============================================================
@@ -500,7 +442,7 @@ def show_response(
 
 
     # ========================================================
-    # DNS
+    # DNS RESOLUTION
     # ========================================================
 
     subsection(
@@ -682,12 +624,30 @@ def show_response(
 
     status = response.status_code
 
-
     if 200 <= status < 300:
 
         success(
             f"SUCCESS - HTTP {status}"
         )
+
+        try:
+
+            data = response.json()
+
+            if "errors" in data:
+
+                warning(
+                    "GraphQL returned one or more errors."
+                )
+
+            elif "data" in data:
+
+                success(
+                    "GraphQL API Gateway request succeeded."
+                )
+
+        except ValueError:
+            pass
 
 
     elif status == 401:
@@ -697,7 +657,7 @@ def show_response(
         )
 
         logger.error(
-            "The API key/session may be invalid or expired."
+            "The API token may be invalid or expired."
         )
 
 
@@ -751,7 +711,7 @@ def show_response(
         )
 
         logger.error(
-            "The requested API endpoint was not found."
+            "The GraphQL API Gateway endpoint was not found."
         )
 
 
@@ -785,7 +745,6 @@ def handle_request_exception(exc):
             "SSL ERROR"
         )
 
-
     elif isinstance(
         exc,
         requests.exceptions.ProxyError
@@ -794,7 +753,6 @@ def handle_request_exception(exc):
         failure(
             "PROXY ERROR"
         )
-
 
     elif isinstance(
         exc,
@@ -805,7 +763,6 @@ def handle_request_exception(exc):
             "CONNECTION ERROR"
         )
 
-
     elif isinstance(
         exc,
         requests.exceptions.Timeout
@@ -815,13 +772,11 @@ def handle_request_exception(exc):
             "REQUEST TIMED OUT"
         )
 
-
     else:
 
         failure(
             "REQUEST ERROR"
         )
-
 
     logger.exception(
         exc
@@ -829,11 +784,60 @@ def handle_request_exception(exc):
 
 
 # ============================================================
+# START
+# ============================================================
+
+separator(
+    "TANIUM API GATEWAY TEST"
+)
+
+logger.info(
+    f"Log file: {LOG_FILE}"
+)
+
+logger.info(
+    "API key loaded: YES"
+)
+
+logger.info(
+    f"API key length: {len(API_KEY)}"
+)
+
+logger.info(
+    f"API key: {API_KEY}"
+)
+
+logger.info(
+    f"Base URL: {BASE_URL}"
+)
+
+logger.info(
+    f"GraphQL URL: {GRAPHQL_URL}"
+)
+
+
+# ============================================================
+# HTTP SESSION
+# ============================================================
+
+http = requests.Session()
+
+http.headers.update(
+    {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "session": API_KEY,
+        "User-Agent": "Tanium-Python-API-Test/1.0",
+    }
+)
+
+
+# ============================================================
 # SHOW INITIAL TARGET
 # ============================================================
 
 show_target_server(
-    VALIDATE_URL
+    GRAPHQL_URL
 )
 
 
@@ -842,8 +846,8 @@ show_target_server(
 # ============================================================
 
 progress = tqdm(
-    total=2,
-    desc="Tanium API tests",
+    total=1,
+    desc="Tanium API test",
     unit="test",
     dynamic_ncols=True,
     colour="green"
@@ -851,123 +855,11 @@ progress = tqdm(
 
 
 # ============================================================
-# 1. VALIDATE SESSION
+# GRAPHQL API GATEWAY TEST
 # ============================================================
 
 separator(
-    "1. TESTING TANIUM SESSION VALIDATION"
-)
-
-validate_payload = {
-    "session": API_KEY
-}
-
-try:
-
-    response = http.post(
-        VALIDATE_URL,
-        json=validate_payload,
-        timeout=TIMEOUT,
-        stream=True
-    )
-
-    peer_ip, peer_port = show_response(
-        "1. SESSION VALIDATION",
-        response
-    )
-
-    progress.update(1)
-
-
-except requests.exceptions.RequestException as exc:
-
-    progress.close()
-
-    handle_request_exception(
-        exc
-    )
-
-    logger.info(
-        f"Log file: {LOG_FILE}"
-    )
-
-    sys.exit(1)
-
-
-# ============================================================
-# STOP IF VALIDATION FAILED
-# ============================================================
-
-if not 200 <= response.status_code < 300:
-
-    progress.close()
-
-    separator(
-        "SESSION VALIDATION FAILED"
-    )
-
-    logger.error(
-        f"API key: {API_KEY}"
-    )
-
-    logger.error(
-        f"HTTP status: {response.status_code}"
-    )
-
-    logger.error(
-        f"HTTP reason: {response.reason}"
-    )
-
-    logger.error(
-        f"Requested server: "
-        f"{urlparse(response.url).hostname}"
-    )
-
-    if peer_ip:
-
-        logger.error(
-            f"Server/peer reached: "
-            f"{peer_ip}:{peer_port}"
-        )
-
-    logger.error(
-        f"Server header: "
-        f"{response.headers.get('Server')}"
-    )
-
-    logger.error(
-        f"Via header: "
-        f"{response.headers.get('Via')}"
-    )
-
-    logger.error("")
-
-    logger.error(
-        "GraphQL test will not run because "
-        "session validation failed."
-    )
-
-    logger.info("")
-
-    logger.info(
-        f"Full diagnostic log: {LOG_FILE}"
-    )
-
-    response.close()
-    http.close()
-
-    sys.exit(1)
-
-
-response.close()
-
-
-# ============================================================
-# 2. GRAPHQL TEST
-# ============================================================
-
-separator(
-    "2. TESTING TANIUM GRAPHQL ENDPOINT"
+    "1. TESTING TANIUM GRAPHQL API GATEWAY"
 )
 
 graphql_payload = {
@@ -984,12 +876,11 @@ try:
     )
 
     peer_ip, peer_port = show_response(
-        "2. GRAPHQL TEST",
+        "1. GRAPHQL API GATEWAY TEST",
         response
     )
 
     progress.update(1)
-
 
 except requests.exceptions.RequestException as exc:
 
@@ -1004,6 +895,7 @@ except requests.exceptions.RequestException as exc:
     )
 
     http.close()
+    logging.shutdown()
 
     sys.exit(1)
 
@@ -1067,13 +959,13 @@ logger.info(
 if 200 <= response.status_code < 300:
 
     success(
-        "TANIUM API TEST COMPLETED SUCCESSFULLY"
+        "TANIUM GRAPHQL API GATEWAY TEST COMPLETED SUCCESSFULLY"
     )
 
 else:
 
     failure(
-        "TANIUM API TEST COMPLETED WITH ERRORS"
+        "TANIUM GRAPHQL API GATEWAY TEST COMPLETED WITH ERRORS"
     )
 
 
