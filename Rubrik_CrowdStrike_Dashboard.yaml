@@ -1,0 +1,319 @@
+name: Rubrik + CrowdStrike
+updateFrequency: never
+timeSelector: {}
+sharedTimeInterval:
+  enabled: true
+  isLive: false
+  start: 1d
+
+widgets:
+  note-rubrik-logo:
+    x: 0
+    y: 0
+    width: 3
+    height: 2
+    text: |-
+      ![Rubrik](https://www.rubrik.com/content/dam/rubrik/brand/rubrik-horizontal-rgb-logos/Rubrik-horizontal-RGB-logos_fullcolor_transparent.png)
+    title: ''
+    type: note
+
+  note-rubrik-overview:
+    x: 3
+    y: 0
+    width: 9
+    height: 2
+    text: |-
+      ## Rubrik Security Cloud in CrowdStrike Falcon LogScale
+      Dashboard for Rubrik Security Cloud events normalized by the `rubrik/security-cloud` package.
+      Use the parameters below to filter all dashboard widgets by Rubrik event action, outcome, severity, or user.
+    title: Rubrik + CrowdStrike
+    type: note
+
+  parameter-panel-rubrik:
+    x: 0
+    y: 2
+    width: 12
+    height: 2
+    parameterIds:
+      - EventAction
+      - Outcome
+      - Severity
+      - User
+    title: Filters
+    type: parameterPanel
+
+  total-events:
+    x: 0
+    y: 4
+    width: 3
+    height: 3
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | count()
+    end: now
+    start: 1d
+    options: {}
+    visualization: single-value
+    title: Total Events
+    isLive: false
+    type: query
+
+  failed-events:
+    x: 3
+    y: 4
+    width: 3
+    height: 3
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | #event.outcome=failure
+      | count()
+    end: now
+    start: 1d
+    options: {}
+    visualization: single-value
+    title: Failed Events
+    isLive: false
+    type: query
+
+  unique-actions:
+    x: 6
+    y: 4
+    width: 3
+    height: 3
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | count(event.action, distinct=true)
+    end: now
+    start: 1d
+    options: {}
+    visualization: single-value
+    title: Unique Event Actions
+    isLive: false
+    type: query
+
+  unique-users:
+    x: 9
+    y: 4
+    width: 3
+    height: 3
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | count(user.name, distinct=true)
+    end: now
+    start: 1d
+    options: {}
+    visualization: single-value
+    title: Unique Users
+    isLive: false
+    type: query
+
+  events-over-time:
+    x: 0
+    y: 7
+    width: 8
+    height: 4
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | timeChart()
+    end: now
+    start: 1d
+    options:
+      connect-points: false
+      imputation: none
+    visualization: time-chart
+    title: Rubrik Events Over Time
+    isLive: false
+    type: query
+
+  outcomes:
+    x: 8
+    y: 7
+    width: 4
+    height: 4
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | groupBy(#event.outcome, function=count())
+    end: now
+    start: 1d
+    options: {}
+    visualization: pie-chart
+    title: Event Outcomes
+    isLive: false
+    type: query
+
+  top-event-actions:
+    x: 0
+    y: 11
+    width: 6
+    height: 4
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | top(event.action, limit=10)
+    end: now
+    start: 1d
+    options:
+      barChartType: grouped
+    visualization: bar-chart
+    title: Top Event Actions
+    isLive: false
+    type: query
+
+  top-users:
+    x: 6
+    y: 11
+    width: 6
+    height: 4
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | user.name=*
+      | top(user.name, limit=10)
+    end: now
+    start: 1d
+    options:
+      cell-overflow: wrap-text
+      configured-columns: {}
+      row-numbers-enabled: false
+    visualization: table-view
+    title: Top Users
+    isLive: false
+    type: query
+
+  recent-events:
+    x: 0
+    y: 15
+    width: 12
+    height: 6
+    queryString: |-
+      #event.module=securitycloud
+      | event.action=~wildcard(?EventAction, ignoreCase=true)
+      | #event.outcome=~wildcard(?Outcome, ignoreCase=true)
+      | Vendor.severity=~wildcard(?Severity, ignoreCase=true)
+      | Vendor.auditUserName=~wildcard(?User, ignoreCase=true)
+      | table([
+          @timestamp,
+          event.action,
+          #event.outcome,
+          event.severity,
+          user.name,
+          error.id,
+          error.code,
+          error.message
+        ], limit=200)
+    end: now
+    start: 1d
+    options:
+      cell-overflow: wrap-text
+      configured-columns: {}
+      row-numbers-enabled: false
+    visualization: table-view
+    title: Recent Rubrik Events
+    isLive: false
+    type: query
+
+  rubrik-documentation:
+    x: 0
+    y: 21
+    width: 12
+    height: 4
+    text: |-
+      ## Rubrik Documentation & Resources
+
+      - [Rubrik Security Cloud Documentation](https://docs.rubrik.com/en-us/saas/saas/rsc_hc.html)
+      - [Rubrik Developer Center](https://developer.rubrik.com/)
+      - [Rubrik Security Cloud API](https://developer.rubrik.com/Rubrik-Security-Cloud-API/)
+      - [RSC GraphQL API Reference](https://developer.rubrik.com/Rubrik-Security-Cloud-API/API-Reference/)
+      - [API Authentication](https://developer.rubrik.com/Rubrik-Security-Cloud-API/authentication/)
+      - [API Playground](https://developer.rubrik.com/Rubrik-Security-Cloud-API/API-playground/)
+    title: Rubrik Documentation
+    type: note
+
+$schema: https://schemas.humio.com/dashboard/v0.20.0
+
+parameters:
+  EventAction:
+    label: Event Action
+    query: |-
+      #event.module=securitycloud
+      | event.action=*
+      | groupBy(event.action)
+    timeInterval: 1d
+    useDashboardTimeIfSet: true
+    type: query
+    defaultValue: '*'
+    width: 1
+    order: 1
+    valueField: event.action
+
+  Outcome:
+    label: Outcome
+    query: |-
+      #event.module=securitycloud
+      | #event.outcome=*
+      | groupBy(#event.outcome)
+    timeInterval: 1d
+    useDashboardTimeIfSet: true
+    type: query
+    defaultValue: '*'
+    width: 1
+    order: 2
+    valueField: '#event.outcome'
+
+  Severity:
+    label: Severity
+    query: |-
+      #event.module=securitycloud
+      | Vendor.severity=*
+      | groupBy(Vendor.severity)
+    timeInterval: 1d
+    useDashboardTimeIfSet: true
+    type: query
+    defaultValue: '*'
+    width: 1
+    order: 3
+    valueField: Vendor.severity
+
+  User:
+    label: User
+    query: |-
+      #event.module=securitycloud
+      | Vendor.auditUserName=*
+      | groupBy(Vendor.auditUserName)
+    timeInterval: 1d
+    useDashboardTimeIfSet: true
+    type: query
+    defaultValue: '*'
+    width: 1
+    order: 4
+    valueField: Vendor.auditUserName
